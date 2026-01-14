@@ -1,201 +1,526 @@
 import React, { useEffect, useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "../../../contexts/AuthContext.jsx";
 import apiClient from "../../../lib/api.js";
 import { ENDPOINTS } from "../../../lib/endpoints.js";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
-// 1. ADDED: The missing Button component import
+import { 
+  Trash2, Plus, FileText, CheckCircle, 
+  XCircle, ChevronDown, ChevronRight, Loader2, User 
+} from "lucide-react";
 import { Button } from "../../../components/ui/button.tsx";
 
 const CoachAssignment = () => {
+  const { user } = useAuth();
+  
+  // --- Data State ---
   const [courses, setCourses] = useState([]);
   const [assignmentsByCourse, setAssignmentsByCourse] = useState({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
-  // State for the creation form
+  // --- Creation Form State ---
   const [selectedCourseId, setSelectedCourseId] = useState("");
-  const [newAssignmentTitle, setNewAssignmentTitle] = useState("");
-  const [newAssignmentLink, setNewAssignmentLink] = useState("");
+  const [formTitle, setFormTitle] = useState("");
+  const [formDesc, setFormDesc] = useState("");
   
-  const { user } = useAuth();
+  // Syllabus & Task Selection State
+  const [syllabus, setSyllabus] = useState([]); 
+  const [loadingSyllabus, setLoadingSyllabus] = useState(false);
+  const [selectedTasks, setSelectedTasks] = useState([]); 
 
-  const fetchData = async () => {
+  // --- Review Modal State ---
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [currentAssignment, setCurrentAssignment] = useState(null);
+  const [submissions, setSubmissions] = useState([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false);
+
+  // --- Feedback Inputs (Map by submissionId) ---
+  const [feedbackMap, setFeedbackMap] = useState({}); 
+
+  // ==================== 1. INITIAL DATA FETCHING ====================
+  
+  const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      setError(null);
+      
+      // 1. Get Coach's Courses
+      const coursesRes = await apiClient.get(ENDPOINTS.COURSES.GET_MY_COURSES_AS_COACH);
+      const myCourses = coursesRes.data.data || [];
+      setCourses(myCourses);
 
-      // 1. Fetch all courses the coach owns
-      const coursesResponse = await apiClient.get(ENDPOINTS.COURSES.GET_MY_COURSES_AS_COACH);
-      const coachCourses = coursesResponse.data.data || [];
-      setCourses(coachCourses);
-
-      // 2. For each course, fetch its assignments
-      if (coachCourses.length > 0) {
-        const assignmentsPromises = coachCourses.map(course =>
-          apiClient.get(ENDPOINTS.ASSIGNMENTS.GET_BY_COURSE(course._id))
-        );
-        const assignmentsResults = await Promise.all(assignmentsPromises);
-
-        // 3. Organize assignments into a map for easy lookup: { courseId: [assignments] }
-        const assignmentsMap = {};
-        coachCourses.forEach((course, index) => {
-          assignmentsMap[course._id] = assignmentsResults[index].data.data || [];
-        });
-        setAssignmentsByCourse(assignmentsMap);
+      // 2. Get Assignments for each course
+      const assignMap = {};
+      if (myCourses.length > 0) {
+        await Promise.all(myCourses.map(async (course) => {
+          try {
+            // [UPDATED] Use ENDPOINTS constant
+            const res = await apiClient.get(ENDPOINTS.ASSIGNMENTS.GET_BY_COURSE(course._id));
+            assignMap[course._id] = res.data.data || [];
+          } catch (e) {
+            console.error(`Failed to load assignments for ${course.title}`, e);
+            assignMap[course._id] = [];
+          }
+        }));
       }
+      setAssignmentsByCourse(assignMap);
+
     } catch (err) {
-      console.error("Error fetching assignment data:", err);
-      setError("Failed to load assignment data. Please refresh the page.");
+      console.error("Error loading dashboard:", err);
+      toast.error("Failed to load dashboard data.");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (user) {
-      fetchData();
-    }
+    if (user) fetchDashboardData();
   }, [user]);
 
-  // Handler for creating a new assignment
-  const handleAddAssignment = async (e) => {
-    e.preventDefault();
-    if (!selectedCourseId || !newAssignmentTitle.trim() || !newAssignmentLink.trim()) {
-      toast.error("Please select a course and fill out all fields.");
+  // ==================== 2. SYLLABUS & TASK SELECTION ====================
+
+  // Fetch syllabus when course is selected in form
+  useEffect(() => {
+    if (!selectedCourseId) {
+      setSyllabus([]);
+      setSelectedTasks([]);
       return;
     }
+
+    const fetchSyllabus = async () => {
+      try {
+        setLoadingSyllabus(true);
+        // [UPDATED] Use ENDPOINTS constant
+        const res = await apiClient.get(ENDPOINTS.SYLLABUS.GET_BY_COURSE(selectedCourseId));
+        const data = res.data.data; 
+        setSyllabus(Array.isArray(data) ? data : data.techniques || []);
+      } catch (error) {
+        toast.error("Could not load course syllabus.");
+      } finally {
+        setLoadingSyllabus(false);
+      }
+    };
+
+    fetchSyllabus();
+  }, [selectedCourseId]);
+
+  const toggleTaskSelection = (chapter) => {
+    setSelectedTasks(prev => {
+      const exists = prev.find(t => t.chapterId === chapter._id);
+      if (exists) {
+        return prev.filter(t => t.chapterId !== chapter._id);
+      } else {
+        return [...prev, { 
+          chapterId: chapter._id, 
+          title: chapter.name, 
+          pgn: chapter.pgn, 
+          fen: chapter.fen 
+        }];
+      }
+    });
+  };
+
+  // ==================== 3. ACTIONS (CREATE, DELETE, REVIEW) ====================
+
+  const handleCreateAssignment = async (e) => {
+    e.preventDefault();
+    if (!selectedCourseId || !formTitle.trim()) {
+      toast.error("Title and Course are required.");
+      return;
+    }
+    if (selectedTasks.length === 0) {
+      toast.error("Please select at least one task/puzzle from the syllabus.");
+      return;
+    }
+
     try {
+      // [UPDATED] Use ENDPOINTS constant
       await apiClient.post(ENDPOINTS.ASSIGNMENTS.CREATE(selectedCourseId), {
-        title: newAssignmentTitle,
-        assignmentLink: newAssignmentLink,
+        title: formTitle,
+        description: formDesc,
+        tasks: selectedTasks
       });
-      toast.success("Assignment created successfully!");
-      // Reset form and refetch data
-      setSelectedCourseId("");
-      setNewAssignmentTitle("");
-      setNewAssignmentLink("");
-      fetchData();
+      
+      toast.success("Assignment created!");
+      
+      // Reset Form
+      setFormTitle("");
+      setFormDesc("");
+      setSelectedTasks([]);
+      setSelectedCourseId(""); 
+      fetchDashboardData(); 
+
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to create assignment.");
-      console.error("Error creating assignment:", err);
     }
   };
-  
-  // Handler for deleting an assignment
-  const handleDeleteAssignment = async (assignmentId) => {
-    if (window.confirm("Are you sure you want to delete this assignment?")) {
-        try {
-            await apiClient.delete(ENDPOINTS.ASSIGNMENTS.DELETE(assignmentId));
-            toast.success("Assignment deleted.");
-            fetchData(); // Refresh data
-        } catch(err) {
-            toast.error(err.response?.data?.message || "Failed to delete assignment.");
-            console.error("Error deleting assignment:", err);
-        }
+
+  const handleDeleteAssignment = async (id) => {
+    if(!window.confirm("Delete this assignment? Student progress will be lost.")) return;
+    try {
+      // [UPDATED] Use ENDPOINTS constant
+      await apiClient.delete(ENDPOINTS.ASSIGNMENTS.DELETE(id));
+      toast.success("Deleted.");
+      fetchDashboardData();
+    } catch (err) {
+      toast.error("Failed to delete.");
     }
   };
+
+  // --- REVIEW LOGIC ---
+
+  const openReviewModal = async (assignment) => {
+    setCurrentAssignment(assignment);
+    setReviewModalOpen(true);
+    setLoadingSubmissions(true);
+    try {
+      // [UPDATED] Use ENDPOINTS constant
+      const res = await apiClient.get(ENDPOINTS.SUBMISSIONS.GET_ALL_FOR_ASSIGNMENT(assignment._id));
+      setSubmissions(res.data.data || []);
+      
+      const initialFeedback = {};
+      (res.data.data || []).forEach(sub => {
+        initialFeedback[sub._id] = sub.feedback || "";
+      });
+      setFeedbackMap(initialFeedback);
+    } catch (error) {
+      toast.error("Could not load submissions.");
+    } finally {
+      setLoadingSubmissions(false);
+    }
+  };
+
+  const submitReview = async (submissionId, status) => {
+    try {
+      const feedbackText = feedbackMap[submissionId] || "";
+      // [UPDATED] Use ENDPOINTS constant
+      await apiClient.patch(ENDPOINTS.SUBMISSIONS.REVIEW(submissionId), {
+        status,
+        feedback: feedbackText
+      });
+      
+      toast.success(`Marked as ${status}`);
+      
+      setSubmissions(prev => prev.map(sub => 
+        sub._id === submissionId ? { ...sub, status, feedback: feedbackText } : sub
+      ));
+
+    } catch (error) {
+      toast.error("Failed to submit review.");
+    }
+  };
+
+  // ==================== RENDER ====================
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#0a1429] via-[#0a1020] to-black p-6 text-white">
-      <h1 className="text-3xl font-extrabold text-center mb-8">
-        👨‍🏫 Coach Assignments
-      </h1>
-
-      {/* Create Assignment Form */}
-      <motion.form
-        onSubmit={handleAddAssignment}
-        initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.5 }}
-        className="bg-white/10 backdrop-blur-lg p-6 rounded-2xl shadow-lg mb-8"
-      >
-        <h2 className="text-xl font-semibold mb-3">➕ Create Assignment</h2>
+    // [UPDATED] Background changed to blue gradient
+    <div className="min-h-screen bg-gradient-to-br from-[#0a1429] via-[#0a1020] to-black p-6 text-white font-sans">
+      <div className="max-w-6xl mx-auto">
         
-        {/* Select Course Dropdown */}
-        <select
-          value={selectedCourseId}
-          onChange={(e) => setSelectedCourseId(e.target.value)}
-          className="w-full p-3 rounded-lg bg-black/40 border border-gray-500 text-white mb-3"
-          required
-        >
-          <option value="">-- Select Course --</option>
-          {courses.map((course) => (
-            <option key={course._id} value={course._id}>
-              {course.title}
-            </option>
-          ))}
-        </select>
+        <h1 className="text-3xl font-bold mb-8 flex items-center gap-3">
+          <span className="text-4xl">🎓</span> Coach Assignments
+        </h1>
 
-        {/* Assignment Title */}
-        <input
-          type="text"
-          className="w-full p-3 rounded-lg bg-black/40 border border-gray-500 text-white mb-3 focus:ring-2 focus:ring-violet-500"
-          placeholder="Enter assignment topic..."
-          value={newAssignmentTitle}
-          onChange={(e) => setNewAssignmentTitle(e.target.value)}
-          required
-        />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* LEFT COLUMN: CREATE FORM */}
+          <div className="lg:col-span-1 space-y-6">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white/10 backdrop-blur-lg border border-white/10 rounded-2xl p-6 shadow-xl sticky top-6"
+            >
+              <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <Plus className="w-5 h-5 text-violet-500"/> New Assignment
+              </h2>
 
-        {/* Assignment Link */}
-        <input
-          type="url"
-          className="w-full p-3 rounded-lg bg-black/40 border border-gray-500 text-white mb-3 focus:ring-2 focus:ring-blue-500"
-          placeholder="Enter assignment link (e.g., Lichess)"
-          value={newAssignmentLink}
-          onChange={(e) => setNewAssignmentLink(e.target.value)}
-          required
-        />
-
-        <button
-          type="submit"
-          className="mt-3 bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-lg shadow-md"
-        >
-          Create Assignment for Course
-        </button>
-      </motion.form>
-
-      {/* Review Assignments Section */}
-      <h2 className="text-2xl font-semibold mb-3">📄 Review Assignments</h2>
-      {loading ? <p className="text-center">Loading assignments...</p>
-      : error ? <p className="text-center text-red-400">{error}</p>
-      : courses.length === 0 ? <p className="text-gray-400">Create a course to start adding assignments.</p>
-      : (
-        <div className="space-y-6">
-          {courses.map(course => (
-            <div key={course._id}>
-              <h3 className="text-xl font-bold text-violet-400 mb-2">{course.title}</h3>
-              {assignmentsByCourse[course._id]?.length > 0 ? (
-                assignmentsByCourse[course._id].map((assignment) => (
-                  <motion.div
-                    key={assignment._id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-white/10 backdrop-blur-lg p-4 rounded-lg shadow-lg mb-4 flex justify-between items-center"
+              <form onSubmit={handleCreateAssignment} className="space-y-4">
+                {/* 1. Select Course */}
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Course</label>
+                  <select 
+                    value={selectedCourseId}
+                    onChange={(e) => setSelectedCourseId(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-sm focus:border-violet-500 outline-none"
                   >
-                    <div>
-                        <h4 className="text-lg font-semibold">{assignment.title}</h4>
-                        <a href={assignment.assignmentLink} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline mt-1 inline-block">
-                            🔗 View Assignment
-                        </a>
+                    <option value="">Select a Course...</option>
+                    {courses.map(c => <option key={c._id} value={c._id}>{c.title}</option>)}
+                  </select>
+                </div>
+
+                {/* 2. Basic Info */}
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Title</label>
+                  <input 
+                    type="text" 
+                    value={formTitle}
+                    onChange={e => setFormTitle(e.target.value)}
+                    placeholder="e.g. Week 1: Pawn Structures"
+                    className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-sm focus:border-violet-500 outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Instructions</label>
+                  <textarea 
+                    value={formDesc}
+                    onChange={e => setFormDesc(e.target.value)}
+                    placeholder="Brief instructions for the student..."
+                    className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-sm focus:border-violet-500 outline-none h-20 resize-none"
+                  />
+                </div>
+
+                {/* 3. Task Selection (Syllabus Tree) */}
+                <div className="border-t border-white/10 pt-4">
+                  <label className="text-xs font-bold text-violet-400 uppercase mb-2 block flex justify-between">
+                    Select Tasks 
+                    <span className="text-white bg-violet-600 px-2 py-0.5 rounded-full text-[10px]">{selectedTasks.length} Selected</span>
+                  </label>
+                  
+                  <div className="h-64 overflow-y-auto bg-black/30 rounded-lg border border-white/5 p-2 custom-scrollbar">
+                    {!selectedCourseId ? (
+                      <p className="text-xs text-gray-400 text-center py-10">Select a course to view syllabus.</p>
+                    ) : loadingSyllabus ? (
+                      <div className="flex justify-center py-10"><Loader2 className="animate-spin text-violet-500"/></div>
+                    ) : syllabus.length === 0 ? (
+                      <p className="text-xs text-red-400 text-center py-10">No syllabus found for this course.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {syllabus.map((tech) => (
+                          <div key={tech._id} className="mb-2">
+                            <h4 className="text-xs font-bold text-gray-400 px-2 py-1 uppercase">{tech.name}</h4>
+                            {tech.chapters?.map((ch) => {
+                              const isSelected = selectedTasks.some(t => t.chapterId === ch._id);
+                              return (
+                                <div 
+                                  key={ch._id}
+                                  onClick={() => toggleTaskSelection(ch)}
+                                  className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-all ${isSelected ? 'bg-violet-500/20 border border-violet-500/50' : 'hover:bg-white/5 border border-transparent'}`}
+                                >
+                                  <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-violet-500 border-violet-500' : 'border-gray-600'}`}>
+                                    {isSelected && <CheckCircle className="w-3 h-3 text-white" />}
+                                  </div>
+                                  <span className={`text-sm ${isSelected ? 'text-white font-medium' : 'text-gray-400'}`}>
+                                    {ch.name}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <Button type="submit" className="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold py-6">
+                  Create Assignment
+                </Button>
+              </form>
+            </motion.div>
+          </div>
+
+          {/* RIGHT COLUMN: ASSIGNMENT LIST */}
+          <div className="lg:col-span-2 space-y-8">
+            {loading ? (
+              <div className="flex flex-col items-center justify-center h-64">
+                <Loader2 className="w-8 h-8 text-violet-500 animate-spin mb-2"/>
+                <p className="text-gray-500 text-sm">Loading dashboard...</p>
+              </div>
+            ) : Object.keys(assignmentsByCourse).length === 0 ? (
+              <div className="text-center py-20 bg-white/5 rounded-2xl border border-white/5 border-dashed">
+                <p className="text-gray-500">No assignments active.</p>
+              </div>
+            ) : (
+              courses.map(course => {
+                const assignments = assignmentsByCourse[course._id];
+                if (!assignments || assignments.length === 0) return null;
+
+                return (
+                  <motion.div 
+                    key={course._id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl overflow-hidden shadow-lg"
+                  >
+                    <div className="bg-black/20 p-4 border-b border-white/5 flex justify-between items-center">
+                      <h3 className="font-bold text-lg text-gray-200">{course.title}</h3>
+                      <span className="text-xs font-mono text-gray-400 bg-black/40 px-2 py-1 rounded">
+                        {assignments.length} Assignments
+                      </span>
                     </div>
-                    {/* This button will now render correctly */}
-                    <Button variant="destructive" size="icon" onClick={() => handleDeleteAssignment(assignment._id)}>
-                        <Trash2 className="h-4 w-4"/>
-                    </Button>
+
+                    <div className="divide-y divide-white/5">
+                      {assignments.map(assign => (
+                        <div key={assign._id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-white/[0.02] transition-colors">
+                          
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-1">
+                              <h4 className="font-bold text-white text-base">{assign.title}</h4>
+                              <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-full font-bold uppercase">
+                                {assign.tasks.length} Tasks
+                              </span>
+                            </div>
+                            {assign.description && (
+                              <p className="text-sm text-gray-400 line-clamp-1">{assign.description}</p>
+                            )}
+                            <p className="text-xs text-gray-500 mt-2 font-mono">
+                              Created: {new Date(assign.createdAt).toLocaleDateString()}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <Button 
+                              variant="outline" 
+                              className="border-violet-500/50 text-violet-300 hover:bg-violet-500/10 hover:text-violet-200"
+                              onClick={() => openReviewModal(assign)}
+                            >
+                              View Submissions
+                            </Button>
+                            
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="text-gray-500 hover:text-red-400 hover:bg-red-500/10"
+                              onClick={() => handleDeleteAssignment(assign._id)}
+                            >
+                              <Trash2 className="w-4 h-4"/>
+                            </Button>
+                          </div>
+
+                        </div>
+                      ))}
+                    </div>
                   </motion.div>
-                ))
-              ) : (
-                <p className="text-gray-500 text-sm ml-2">No assignments for this course yet.</p>
-              )}
-            </div>
-          ))}
+                );
+              })
+            )}
+          </div>
+
         </div>
-      )}
+      </div>
+
+      {/* ================= REVIEW MODAL ================= */}
+      <AnimatePresence>
+        {reviewModalOpen && currentAssignment && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
+              className="bg-[#121212] border border-white/10 w-full max-w-4xl h-[80vh] rounded-2xl flex flex-col shadow-2xl"
+            >
+              {/* Modal Header */}
+              <div className="p-6 border-b border-white/10 flex justify-between items-center bg-[#181818] rounded-t-2xl">
+                <div>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    Submissions: <span className="text-violet-400">{currentAssignment.title}</span>
+                  </h2>
+                  <p className="text-xs text-gray-500 mt-1">Total Tasks: {currentAssignment.tasks.length}</p>
+                </div>
+                <button onClick={() => setReviewModalOpen(false)} className="p-2 hover:bg-white/10 rounded-full text-gray-400 hover:text-white">
+                  <XCircle className="w-6 h-6" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="flex-1 overflow-y-auto p-6 bg-[#0a0a0a]">
+                {loadingSubmissions ? (
+                  <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                    <Loader2 className="w-8 h-8 animate-spin mb-2"/>
+                    Loading...
+                  </div>
+                ) : submissions.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-full border border-dashed border-white/10 rounded-xl">
+                    <p className="text-gray-500">No students have started this assignment yet.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {submissions.map(sub => {
+                      // Calculate Progress
+                      const progressStr = sub.progress || "0 / 0"; // Backend sends "3 / 5" string
+                      const [solved, total] = progressStr.split(' / ').map(Number);
+                      const percent = total > 0 ? (solved / total) * 100 : 0;
+                      
+                      return (
+                        <div key={sub._id} className="bg-[#161616] border border-white/5 rounded-xl p-5 flex flex-col gap-4">
+                          
+                          {/* Student Info & Progress */}
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full bg-violet-600/20 text-violet-400 flex items-center justify-center">
+                                <User className="w-5 h-5"/>
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-white">{sub.student?.fullname || "Unknown"}</h4>
+                                <p className="text-xs text-gray-500">@{sub.student?.username}</p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <span className={`text-sm font-bold ${percent === 100 ? 'text-green-400' : 'text-yellow-400'}`}>
+                                {progressStr} Solved
+                              </span>
+                              <div className="w-20 h-1.5 bg-gray-800 rounded-full mt-1 ml-auto">
+                                <div className="h-full bg-current rounded-full" style={{ width: `${percent}%` }}></div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Status Badge */}
+                          <div className="flex items-center gap-2 text-xs">
+                            Status: 
+                            <span className={`px-2 py-0.5 rounded uppercase font-bold ${
+                              sub.status === 'pass' ? 'bg-green-500/20 text-green-400' :
+                              sub.status === 'fail' ? 'bg-red-500/20 text-red-400' :
+                              'bg-gray-700 text-gray-300'
+                            }`}>
+                              {sub.status}
+                            </span>
+                          </div>
+
+                          {/* Feedback Section */}
+                          <div className="mt-auto pt-4 border-t border-white/5">
+                            <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">Feedback Review</label>
+                            <textarea
+                              className="w-full bg-black/40 border border-white/10 rounded-lg p-2 text-sm text-gray-300 focus:border-violet-500 outline-none resize-none mb-3"
+                              rows="2"
+                              placeholder="Write feedback..."
+                              value={feedbackMap[sub._id] || ""}
+                              onChange={(e) => setFeedbackMap(prev => ({ ...prev, [sub._id]: e.target.value }))}
+                            />
+                            
+                            <div className="flex gap-2">
+                              <Button 
+                                size="sm" 
+                                className={`flex-1 ${sub.status === 'pass' ? 'bg-green-600 hover:bg-green-500' : 'bg-white/5 hover:bg-green-500/20 text-green-400'}`}
+                                onClick={() => submitReview(sub._id, 'pass')}
+                              >
+                                Pass
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                className={`flex-1 ${sub.status === 'fail' ? 'bg-red-600 hover:bg-red-500' : 'bg-white/5 hover:bg-red-500/20 text-red-400'}`}
+                                onClick={() => submitReview(sub._id, 'fail')}
+                              >
+                                Fail
+                              </Button>
+                            </div>
+                          </div>
+
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };
 
 export default CoachAssignment;
-

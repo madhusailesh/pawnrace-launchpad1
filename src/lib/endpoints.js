@@ -1,6 +1,3 @@
-// This file serves as a single source of truth for all backend API endpoint paths.
-// Using this ensures consistency and prevents typos when making API calls.
-
 export const ENDPOINTS = {
   USERS: {
     REGISTER: '/users/register',
@@ -24,17 +21,24 @@ export const ENDPOINTS = {
     ADD_STUDENT: (courseId) => `/courses/${courseId}/students`,
     REMOVE_STUDENT: (courseId, studentId) => `/courses/${courseId}/students/${studentId}`,
   },
+  
+  
   ASSIGNMENTS: {
     CREATE: (courseId) => `/assignments/course/${courseId}`,
     GET_BY_COURSE: (courseId) => `/assignments/course/${courseId}`,
     DELETE: (assignmentId) => `/assignments/${assignmentId}`,
-    UPDATE_STATUS: (assignmentId) => `/assignments/${assignmentId}/status`,
+    
+    SOLVE_TASK: (assignmentId) => `/submissions/${assignmentId}/solve`, 
   },
+  
   SUBMISSIONS: {
-    SUBMIT: (assignmentId) => `/submissions/assignment/${assignmentId}`,
-    GET_BY_ASSIGNMENT: (assignmentId) => `/submissions/assignment/${assignmentId}`,
+    GET_ALL_FOR_ASSIGNMENT: (assignmentId) => `/submissions/${assignmentId}/all`,
+    
     REVIEW: (submissionId) => `/submissions/${submissionId}/review`,
+    
+    SOLVE: (assignmentId) => `/submissions/${assignmentId}/solve`,
   },
+  
   CLASSES: {
     SCHEDULE: (courseId) => `/classes/course/${courseId}`,
     GET_BY_COURSE: (courseId) => `/classes/course/${courseId}`,
@@ -51,7 +55,6 @@ export const ENDPOINTS = {
     GET_STUDENTS_FOR_COACH: '/chats/coach/students',
     GET_CHAT_HISTORY: (receiverId) => `/chats/conversation/${receiverId}`,
   },
-
   TESTS: {
     CREATE: (courseId) => `/tests/course/${courseId}`,
     GET_BY_COURSE: (courseId) => `/tests/course/${courseId}`,
