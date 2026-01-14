@@ -115,11 +115,6 @@ const menuItems = [
     color: "bg-gradient-to-br from-yellow-400 to-orange-500",
   },
   {
-    name: "Database",
-    icon: Database,
-    color: "bg-gradient-to-br from-yellow-400 to-orange-500",
-  },
-  {
     name: "Chats",
     icon: MessageSquare,
     color: "bg-gradient-to-br from-yellow-400 to-orange-500",
