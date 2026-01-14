@@ -31,7 +31,6 @@ const StudentAssignment = () => {
 
       if (enrolledCourses.length > 0) {
         // 2. Fetch assignments
-        // [UPDATED] Use ENDPOINTS constant instead of hardcoded string
         const assignmentPromises = enrolledCourses.map(course =>
           apiClient.get(ENDPOINTS.ASSIGNMENTS.GET_BY_COURSE(course._id))
         );
@@ -46,7 +45,6 @@ const StudentAssignment = () => {
 
         allAssignments.forEach(assign => {
           const sub = assign.mySubmission;
-          // If no submission yet, or status is pending/submitted/fail -> It's "Active/Pending"
           if (!sub || ['pending', 'in_progress', 'submitted', 'fail'].includes(sub.status)) {
             pending.push(assign);
           } else if (sub.status === 'pass') {
@@ -159,7 +157,8 @@ const StudentAssignment = () => {
                         {/* Action Button */}
                         <div>
                           <Button 
-                            onClick={() => navigate(`/dashboard/student/assignment/${assign._id}`)}
+                            /* --- FIXED: Matches your /student-dashboard route --- */
+                            onClick={() => navigate(`/student-dashboard/assignment/${assign._id}`)}
                             className="w-full md:w-auto bg-violet-600 hover:bg-violet-500 text-white font-bold"
                           >
                             <Play className="w-4 h-4 mr-2"/> 
@@ -209,7 +208,8 @@ const StudentAssignment = () => {
                            variant="ghost" 
                            size="sm"
                            className="text-gray-500 hover:text-white"
-                           onClick={() => navigate(`/dashboard/student/assignment/${assign._id}`)}
+                           /* --- FIXED: Matches your /student-dashboard route --- */
+                           onClick={() => navigate(`/student-dashboard/assignment/${assign._id}`)}
                         >
                           Review <ChevronRight className="w-3 h-3 ml-1"/>
                         </Button>

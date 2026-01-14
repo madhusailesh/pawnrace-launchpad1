@@ -5,10 +5,17 @@ import apiClient from "../../../lib/api.js";
 import { ENDPOINTS } from "../../../lib/endpoints.js";
 import { toast } from "sonner";
 import { 
-  Trash2, Plus, FileText, CheckCircle, 
-  XCircle, ChevronDown, ChevronRight, Loader2, User 
+  Trash2, Plus, CheckCircle, 
+  XCircle, Loader2, User, Filter 
 } from "lucide-react";
 import { Button } from "../../../components/ui/button.tsx";
+
+// [NEW] Constant matching CoachDatabase.jsx
+const LEVELS = [
+  'Beginner 1', 'Beginner 2', 'Beginner 3', 
+  'Intermediate 1', 'Intermediate 2', 'Intermediate 3', 
+  'Advanced 1', 'Advanced 2', 'Advanced 3', 'Master'
+];
 
 const CoachAssignment = () => {
   const { user } = useAuth();
@@ -27,6 +34,9 @@ const CoachAssignment = () => {
   const [syllabus, setSyllabus] = useState([]); 
   const [loadingSyllabus, setLoadingSyllabus] = useState(false);
   const [selectedTasks, setSelectedTasks] = useState([]); 
+  
+  // [UPDATED] Filter State defaults to first level to match Database behavior
+  const [filterLevel, setFilterLevel] = useState("Beginner 1");
 
   // --- Review Modal State ---
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
@@ -53,7 +63,6 @@ const CoachAssignment = () => {
       if (myCourses.length > 0) {
         await Promise.all(myCourses.map(async (course) => {
           try {
-            // [UPDATED] Use ENDPOINTS constant
             const res = await apiClient.get(ENDPOINTS.ASSIGNMENTS.GET_BY_COURSE(course._id));
             assignMap[course._id] = res.data.data || [];
           } catch (e) {
@@ -78,30 +87,40 @@ const CoachAssignment = () => {
 
   // ==================== 2. SYLLABUS & TASK SELECTION ====================
 
-  // Fetch syllabus when course is selected in form
+  // [UPDATED] Fetch syllabus depends on Course AND Level (Server-side filter)
   useEffect(() => {
     if (!selectedCourseId) {
       setSyllabus([]);
-      setSelectedTasks([]);
+      setSelectedTasks([]); // Optional: Clear selection on course change
       return;
     }
 
     const fetchSyllabus = async () => {
       try {
         setLoadingSyllabus(true);
-        // [UPDATED] Use ENDPOINTS constant
-        const res = await apiClient.get(ENDPOINTS.SYLLABUS.GET_BY_COURSE(selectedCourseId));
+        
+        // [UPDATED] API Call uses query param like CoachDatabase
+        // Assuming ENDPOINTS.SYLLABUS.GET_BY_COURSE returns string like "/syllabus/course/:id"
+        // We append the level query param
+        const baseUrl = ENDPOINTS.SYLLABUS.GET_BY_COURSE(selectedCourseId);
+        const res = await apiClient.get(`${baseUrl}?level=${encodeURIComponent(filterLevel)}`);
+        
         const data = res.data.data; 
-        setSyllabus(Array.isArray(data) ? data : data.techniques || []);
+        
+        // Ensure we handle both structure types (array of levels OR object with techniques)
+        const syllabusList = Array.isArray(data) ? data : (data.techniques || []);
+        setSyllabus(syllabusList);
+        
       } catch (error) {
         toast.error("Could not load course syllabus.");
+        setSyllabus([]);
       } finally {
         setLoadingSyllabus(false);
       }
     };
 
     fetchSyllabus();
-  }, [selectedCourseId]);
+  }, [selectedCourseId, filterLevel]); // [UPDATED] Dependency array includes filterLevel
 
   const toggleTaskSelection = (chapter) => {
     setSelectedTasks(prev => {
@@ -119,6 +138,9 @@ const CoachAssignment = () => {
     });
   };
 
+  // [REMOVED] Client-side filteredSyllabus logic. 
+  // We now use `syllabus` directly because the API returns exactly what we asked for.
+
   // ==================== 3. ACTIONS (CREATE, DELETE, REVIEW) ====================
 
   const handleCreateAssignment = async (e) => {
@@ -133,7 +155,6 @@ const CoachAssignment = () => {
     }
 
     try {
-      // [UPDATED] Use ENDPOINTS constant
       await apiClient.post(ENDPOINTS.ASSIGNMENTS.CREATE(selectedCourseId), {
         title: formTitle,
         description: formDesc,
@@ -157,7 +178,6 @@ const CoachAssignment = () => {
   const handleDeleteAssignment = async (id) => {
     if(!window.confirm("Delete this assignment? Student progress will be lost.")) return;
     try {
-      // [UPDATED] Use ENDPOINTS constant
       await apiClient.delete(ENDPOINTS.ASSIGNMENTS.DELETE(id));
       toast.success("Deleted.");
       fetchDashboardData();
@@ -173,7 +193,6 @@ const CoachAssignment = () => {
     setReviewModalOpen(true);
     setLoadingSubmissions(true);
     try {
-      // [UPDATED] Use ENDPOINTS constant
       const res = await apiClient.get(ENDPOINTS.SUBMISSIONS.GET_ALL_FOR_ASSIGNMENT(assignment._id));
       setSubmissions(res.data.data || []);
       
@@ -192,7 +211,6 @@ const CoachAssignment = () => {
   const submitReview = async (submissionId, status) => {
     try {
       const feedbackText = feedbackMap[submissionId] || "";
-      // [UPDATED] Use ENDPOINTS constant
       await apiClient.patch(ENDPOINTS.SUBMISSIONS.REVIEW(submissionId), {
         status,
         feedback: feedbackText
@@ -212,7 +230,6 @@ const CoachAssignment = () => {
   // ==================== RENDER ====================
 
   return (
-    // [UPDATED] Background changed to blue gradient
     <div className="min-h-screen bg-gradient-to-br from-[#0a1429] via-[#0a1020] to-black p-6 text-white font-sans">
       <div className="max-w-6xl mx-auto">
         
@@ -239,7 +256,10 @@ const CoachAssignment = () => {
                   <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Course</label>
                   <select 
                     value={selectedCourseId}
-                    onChange={(e) => setSelectedCourseId(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedCourseId(e.target.value);
+                      // Reset to first level on new course selection if needed, or keep current filter
+                    }}
                     className="w-full bg-black/40 border border-white/10 rounded-lg p-3 text-sm focus:border-violet-500 outline-none"
                   >
                     <option value="">Select a Course...</option>
@@ -271,40 +291,96 @@ const CoachAssignment = () => {
 
                 {/* 3. Task Selection (Syllabus Tree) */}
                 <div className="border-t border-white/10 pt-4">
-                  <label className="text-xs font-bold text-violet-400 uppercase mb-2 block flex justify-between">
-                    Select Tasks 
-                    <span className="text-white bg-violet-600 px-2 py-0.5 rounded-full text-[10px]">{selectedTasks.length} Selected</span>
-                  </label>
+                  {/* HEADER: Label + Filter Dropdown */}
+                  <div className="flex flex-col gap-2 mb-2">
+                    <label className="text-xs font-bold text-violet-400 uppercase flex justify-between items-center">
+                      <span>Select Tasks</span>
+                      <span className="text-white bg-violet-600 px-2 py-0.5 rounded-full text-[10px]">{selectedTasks.length} Selected</span>
+                    </label>
+
+                    {/* Filter Dropdown (UPDATED TO MATCH DATABASE) */}
+                    <div className="flex items-center gap-2 bg-black/40 p-2 rounded-lg border border-white/10">
+                        <Filter className="w-4 h-4 text-gray-400" />
+                        <select 
+                          value={filterLevel}
+                          onChange={(e) => setFilterLevel(e.target.value)}
+                          className="bg-transparent text-sm outline-none w-full text-white cursor-pointer"
+                        >
+                          {LEVELS.map(lvl => (
+                            <option key={lvl} value={lvl} className="bg-gray-900">{lvl}</option>
+                          ))}
+                        </select>
+                    </div>
+                  </div>
                   
-                  <div className="h-64 overflow-y-auto bg-black/30 rounded-lg border border-white/5 p-2 custom-scrollbar">
+                  {/* EXPANDED LIST CONTAINER */}
+                  <div className="h-[600px] overflow-y-auto bg-black/30 rounded-lg border border-white/5 p-2 custom-scrollbar relative">
                     {!selectedCourseId ? (
                       <p className="text-xs text-gray-400 text-center py-10">Select a course to view syllabus.</p>
                     ) : loadingSyllabus ? (
                       <div className="flex justify-center py-10"><Loader2 className="animate-spin text-violet-500"/></div>
                     ) : syllabus.length === 0 ? (
-                      <p className="text-xs text-red-400 text-center py-10">No syllabus found for this course.</p>
+                      <div className="text-center py-10">
+                        <p className="text-xs text-red-400">
+                           No techniques found in {filterLevel}
+                        </p>
+                      </div>
                     ) : (
-                      <div className="space-y-3">
-                        {syllabus.map((tech) => (
-                          <div key={tech._id} className="mb-2">
-                            <h4 className="text-xs font-bold text-gray-400 px-2 py-1 uppercase">{tech.name}</h4>
-                            {tech.chapters?.map((ch) => {
-                              const isSelected = selectedTasks.some(t => t.chapterId === ch._id);
-                              return (
-                                <div 
-                                  key={ch._id}
-                                  onClick={() => toggleTaskSelection(ch)}
-                                  className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-all ${isSelected ? 'bg-violet-500/20 border border-violet-500/50' : 'hover:bg-white/5 border border-transparent'}`}
-                                >
-                                  <div className={`w-4 h-4 rounded border flex items-center justify-center ${isSelected ? 'bg-violet-500 border-violet-500' : 'border-gray-600'}`}>
-                                    {isSelected && <CheckCircle className="w-3 h-3 text-white" />}
-                                  </div>
-                                  <span className={`text-sm ${isSelected ? 'text-white font-medium' : 'text-gray-400'}`}>
-                                    {ch.name}
-                                  </span>
-                                </div>
-                              );
-                            })}
+                      <div className="space-y-4">
+                        {/* We map directly over syllabus now, as API filtered it */}
+                        {syllabus.map((item) => (
+                          <div key={item._id} className="mb-2">
+                            {/* Level / Group Header */}
+                            <h4 className="text-xs font-bold text-gray-300 bg-[#1a2333] px-3 py-2 rounded-t border border-white/10 border-b-0 sticky top-0 z-10 flex justify-between items-center shadow-md">
+                                {item.name || item.level} 
+                            </h4>
+                            
+                            {/* Items Container */}
+                            <div className="border border-white/10 rounded-b bg-black/20 p-2 space-y-1">
+                                
+                                {/* Structure Type 1: Techniques -> Chapters (Standard) */}
+                                {item.techniques?.map((tech) => (
+                                    <div key={tech._id} className="mb-2">
+                                        <div className="text-[11px] font-bold text-violet-400 px-2 py-1 uppercase">{tech.name}</div>
+                                        {tech.chapters?.map(ch => {
+                                            const isSelected = selectedTasks.some(t => t.chapterId === ch._id);
+                                            return (
+                                                <div 
+                                                  key={ch._id}
+                                                  onClick={() => toggleTaskSelection(ch)}
+                                                  className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-all ml-2 ${isSelected ? 'bg-violet-600/20 border border-violet-500/50' : 'hover:bg-white/5 border border-transparent'}`}
+                                                >
+                                                  <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-violet-500 border-violet-500' : 'border-gray-600'}`}>
+                                                    {isSelected && <CheckCircle className="w-3 h-3 text-white" />}
+                                                  </div>
+                                                  <span className={`text-sm ${isSelected ? 'text-white font-medium' : 'text-gray-400'}`}>
+                                                    {ch.name}
+                                                  </span>
+                                                </div>
+                                            )
+                                        })}
+                                    </div>
+                                ))}
+
+                                {/* Structure Type 2: Direct Chapters (Coach Database style if flat) */}
+                                {item.chapters?.map((ch) => {
+                                  const isSelected = selectedTasks.some(t => t.chapterId === ch._id);
+                                  return (
+                                    <div 
+                                      key={ch._id}
+                                      onClick={() => toggleTaskSelection(ch)}
+                                      className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-all ${isSelected ? 'bg-violet-600/20 border border-violet-500/50' : 'hover:bg-white/5 border border-transparent'}`}
+                                    >
+                                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${isSelected ? 'bg-violet-500 border-violet-500' : 'border-gray-600'}`}>
+                                        {isSelected && <CheckCircle className="w-3 h-3 text-white" />}
+                                      </div>
+                                      <span className={`text-sm ${isSelected ? 'text-white font-medium' : 'text-gray-400'}`}>
+                                        {ch.name}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                            </div>
                           </div>
                         ))}
                       </div>
