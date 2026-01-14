@@ -117,7 +117,7 @@ const CustomControlOverlay = () => {
         newProcessor = BackgroundProcessor({
           mode: 'virtual-background',
           imagePath:
-            'src\assets\BG image .png',
+            'src\assets\background.png',
         });
       }
 
