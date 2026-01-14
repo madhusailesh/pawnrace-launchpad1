@@ -40,10 +40,10 @@ export const ENDPOINTS = {
   },
   
   CLASSES: {
-    SCHEDULE: (courseId) => `/classes/course/${courseId}`,
-    GET_BY_COURSE: (courseId) => `/classes/course/${courseId}`,
-    UPDATE: (classId) => `/classes/${classId}`,
-    DELETE: (classId) => `/classes/${classId}`,
+    SCHEDULE: (courseId) => `/training/course/${courseId}`,
+    GET_BY_COURSE: (courseId) => `/training/course/${courseId}`,
+    UPDATE: (classId) => `/training/${classId}`,
+    DELETE: (classId) => `/training/${classId}`,
   },
   NEW_CLASSES:{
     SCHEDULE: (courseId) => `/newclasses/course/${courseId}`,
