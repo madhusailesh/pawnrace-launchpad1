@@ -57,6 +57,10 @@ const VideoClassroom = () => {
     const [cameraOn, setCameraOn] = useState(true);
     const [chatMessages, setChatMessages] = useState([]);
 
+    // --- [NEW] CONTROL STATE ---
+    // Stores which userId controls which color. { white: "userId1", black: "userId2" }
+    const [controls, setControls] = useState({ white: null, black: null });
+
     const drawing = useBoardDrawing(orientation);
 
     // --- 1. RESIZE ---
@@ -75,7 +79,7 @@ const VideoClassroom = () => {
             setIsConnected(true); 
             const userInfo = {
                 name: user?.fullname || user?.username || "Coach", 
-                role: "Coach",
+                role: user?.role === 'coach' ? "Coach" : "Student", // Ensure role is sent correctly
                 _id: user?._id
             };
             socketRef.current.emit('join_room', { roomId, user: userInfo }); 
@@ -83,6 +87,11 @@ const VideoClassroom = () => {
         
         socketRef.current.on('update_user_list', (users) => setConnectedUsers(users));
         
+        // [NEW] Listen for control updates
+        socketRef.current.on('controls_updated', (newControls) => {
+            setControls(newControls);
+        });
+
         socketRef.current.on('receive_move', (moveData) => {
             // Received a move or position from socket
             if (moveData.fen && !moveData.from) {
@@ -155,19 +164,58 @@ const VideoClassroom = () => {
         if (socketRef.current) socketRef.current.emit('send_message', { roomId, ...messageData });
     };
 
+    // [NEW] Handler for Coach assigning controls
+    const handleAssignControl = (color, userId) => {
+        const newControls = { ...controls, [color]: userId };
+        setControls(newControls);
+        // Emit to server so all students update their permission state
+        if (socketRef.current) {
+            socketRef.current.emit('update_controls', { roomId, controls: newControls });
+        }
+    };
+
     // --- MAIN MOVE HANDLER ---
-    function onDrop(source, target) {
+    function onDrop(source, target, piece) {
         if (viewIndex !== -1) { toast.error("Resume live game to play."); return false; }
+        
+        // [NEW] PERMISSION CHECK
+        // 'piece' string is like 'wP', 'bK'. First char is color 'w' or 'b'.
+        const pieceColor = piece[0]; 
+        
+        // IMPORTANT: We need to know who "I" am. 
+        // If I am not the assigned player for this color, block.
+        // NOTE: Coach should probably always be able to move. 
+        // Let's assume the user object has a role or ID we can check.
+        // For now, I will use a simple check against the controls state.
+        
+        // Check if the user is a coach to bypass restrictions
+        const isCoach = user?.role === 'coach'; 
+
+        if (!isCoach) {
+            // If controls are set, enforce them.
+            // Check White Move
+            if (pieceColor === 'w') {
+                if (controls.white !== user?._id) {
+                    toast.error("You are not assigned to play White.");
+                    return false;
+                }
+            }
+            // Check Black Move
+            if (pieceColor === 'b') {
+                if (controls.black !== user?._id) {
+                    toast.error("You are not assigned to play Black.");
+                    return false;
+                }
+            }
+        }
         
         // 1. IS THIS A CUSTOM / INVALID BOARD?
         if (customFen) {
-            // CHECK: Is Free Mode enabled?
             if (!illegalMode) {
                 toast.error("Strict Mode: Cannot move on invalid board.");
-                return false; // BLOCK THE MOVE
+                return false; 
             }
 
-            // If Free Mode is ON, allow manual move
             try {
                 const newFen = movePieceInFen(customFen, source, target);
                 setCustomFen(newFen);
@@ -188,10 +236,10 @@ const VideoClassroom = () => {
             const tempGame = new Chess(); 
             tempGame.loadPgn(game.pgn());
             const move = tempGame.move({ from: source, to: target, promotion: 'q' });
-            if (!move) return false; // Rule violation (handled by chess.js)
+            if (!move) return false; 
             
             setGame(tempGame); 
-            setHistory(tempGame.history()); // Update history state
+            setHistory(tempGame.history()); 
             setViewIndex(-1);
             handleClearWrapper(); 
             
@@ -201,7 +249,7 @@ const VideoClassroom = () => {
     }
 
     const undoMove = () => {
-        if (customFen) return; // Can't undo on a static board
+        if (customFen) return; 
         const tempGame = new Chess(); 
         tempGame.loadPgn(game.pgn());
         if (tempGame.undo()) {
@@ -219,15 +267,11 @@ const VideoClassroom = () => {
             return;
         }
 
-        // Reset board key to force re-render
         setBoardKey(prev => prev + 1);
 
         const cleanedData = data.trim();
-        
-        // CLEAN PGN: Remove headers, keep comments/moves
         const movesOnly = cleanedData.replace(/\[.*?\]/g, "").trim();
         setCurrentPgn(movesOnly); 
-        
         setCustomFen(null); 
 
         // 1. Try Loading as Standard PGN
@@ -264,7 +308,6 @@ const VideoClassroom = () => {
             if (!targetFen.includes('/')) throw new Error("Not a FEN");
 
             try {
-                // Try Standard chess.js load
                 const fenGame = new Chess(targetFen);
                 setGame(fenGame);
                 setStartFen(targetFen);
@@ -273,11 +316,10 @@ const VideoClassroom = () => {
                 if (socketRef.current) socketRef.current.emit('make_move', { roomId, fen: targetFen });
                 toast.success(`Loaded Position: ${title}`);
             } catch (chessError) {
-                // 4. FALLBACK: ALWAYS LOAD THE BOARD visually
                 console.warn("Loaded invalid position:", chessError.message);
                 
                 setCustomFen(targetFen); 
-                setGame(new Chess()); // Reset engine
+                setGame(new Chess()); 
                 setStartFen(targetFen);
                 setHistory([]);
                 setViewIndex(-1);
@@ -296,7 +338,6 @@ const VideoClassroom = () => {
         }
     };
 
-    // Handles loading a chapter and setting up the playlist
     const handlePlayPlaylist = (chapterList, index) => {
         setPlaylist(chapterList);
         setCurrentChapterIndex(index);
@@ -310,7 +351,6 @@ const VideoClassroom = () => {
         }
     };
 
-    // Navigate Next/Prev
     const handleNavigateChapter = (direction) => {
         const newIndex = currentChapterIndex + direction;
         if (newIndex >= 0 && newIndex < playlist.length) {
@@ -337,7 +377,7 @@ const VideoClassroom = () => {
     };
 
     const getBoardPosition = () => { 
-        if (customFen) return customFen; // Priority for illegal positions
+        if (customFen) return customFen; 
         if (viewIndex === -1) return game.fen();
         try {
             const t = new Chess(startFen); 
@@ -345,6 +385,9 @@ const VideoClassroom = () => {
             return t.fen();
         } catch (e) { return game.fen(); }
     };
+
+    // Determine user role for passing to Sidebar
+    const currentUserRole = user?.role === 'coach' ? "Coach" : "Student";
 
     return (
         <div className="h-screen bg-[#111] text-white flex flex-col overflow-hidden font-sans">
@@ -359,7 +402,6 @@ const VideoClassroom = () => {
                     </span>
                 </div>
                 
-                {/* --- CENTER: PLAYLIST CONTROLS --- */}
                 {playlist.length > 0 && (
                     <div className="hidden md:flex items-center bg-[#222] rounded-lg border border-white/10 p-1 gap-2 absolute left-1/2 transform -translate-x-1/2">
                         <button 
@@ -393,7 +435,6 @@ const VideoClassroom = () => {
 
                 <div className="flex items-center gap-3">
                     
-                    {/* --- CURRENT TECHNIQUE BOX --- */}
                     <div className="flex items-center bg-[#202020] border border-white/10 rounded-md px-3 py-1 mr-2">
                         <div className="flex flex-col mr-3 items-end">
                             <span className="text-[9px] text-gray-500 font-bold uppercase tracking-wider">Current Lesson</span>
@@ -450,7 +491,6 @@ const VideoClassroom = () => {
                     
                     <AnalysisTools 
                         onUndo={undoMove}
-                        // [FIX] onReset now emits to sockets!
                         onReset={() => { 
                             const ng = new Chess(); 
                             setGame(ng); 
@@ -460,7 +500,6 @@ const VideoClassroom = () => {
                             setViewIndex(-1); 
                             handleClearWrapper(); 
                             
-                            // *** ADDED: Emit Reset to Students ***
                             if (socketRef.current) {
                                 socketRef.current.emit('make_move', { roomId, fen: ng.fen() });
                             }
@@ -471,8 +510,6 @@ const VideoClassroom = () => {
                         showTools={showTools} setShowTools={setShowTools} 
                         showCoordinates={showCoordinates} setShowCoordinates={setShowCoordinates}
                         illegalMode={illegalMode} setIllegalMode={setIllegalMode}
-                        
-                        // Pass the CLEAN PGN text to the tools
                         currentPgn={currentPgn} 
                     />
                 </div>
@@ -487,6 +524,11 @@ const VideoClassroom = () => {
                     chatMessages={chatMessages} onSendMessage={handleSendMessage} 
                     connectedUsers={connectedUsers} roomId={roomId}
                     currentPgn={currentPgn}
+                    
+                    // [NEW] Pass Control Props
+                    userRole={currentUserRole} // Dynamic role from auth context
+                    controls={controls}
+                    onAssignControl={handleAssignControl}
                 />
             </div>
             
@@ -497,7 +539,7 @@ const VideoClassroom = () => {
                 onClose={() => setShowSyllabusModal(false)} 
                 onPlayPlaylist={handlePlayPlaylist}
                 roomId={roomId} 
-                onLoadPGN={handleLoadPGN}
+                onLoadPGN={handleLoadPGN} 
             />
         </div>
     );

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   MonitorUp, Clipboard, Download, X, 
-  ChevronLeft, ChevronRight, Users, MessageSquare, List 
+  ChevronLeft, ChevronRight, Users, MessageSquare, List, Shield 
 } from 'lucide-react';
 import ClassroomChat from './ClassroomChat';
 import VideoRoom from '../../../../components/VideoRoom'; 
@@ -11,7 +11,11 @@ const ClassroomSidebar = ({
     onLoadPGN, onDownloadPGN, 
     chatMessages, onSendMessage,
     connectedUsers = [],
-    roomId 
+    roomId,
+    // [NEW PROPS]
+    userRole, // 'Coach' or 'Student'
+    controls, // { white: userId, black: userId }
+    onAssignControl // Function(color, userId)
 }) => {
     const [showPGNModal, setShowPGNModal] = useState(false);
     const [pgnInput, setPgnInput] = useState("");
@@ -38,12 +42,10 @@ const ClassroomSidebar = ({
     );
 
     return (
-        // [CHANGE] Width changed from w-[360px] to w-[40vw] (40% of screen width)
-        // Added min-w-[350px] so it doesn't get too small on laptops
+        // Width changed to w-[40vw] (40% of screen width)
         <div className="w-[40vw] min-w-[350px] bg-[#0F0F12] border-l border-white/5 flex flex-col h-full shrink-0 shadow-2xl shadow-black transition-all duration-300 ease-in-out">
             
             {/* --- TOP: VIDEO AREA --- */}
-            {/* Aspect ratio container that won't shrink */}
             <div className="w-full shrink-0 aspect-video bg-black relative border-b border-white/5 overflow-hidden shadow-md z-20">
                 {roomId ? (
                     <VideoRoom roomId={roomId} />
@@ -65,7 +67,6 @@ const ClassroomSidebar = ({
             </div>
 
             {/* --- BOTTOM: CONTENT AREA --- */}
-            {/* flex-1 and min-h-0 are CRITICAL to stop content from overflowing/cutting off */}
             <div className="flex-1 min-h-0 bg-[#0F0F12] relative flex flex-col">
                 
                 {/* 1. MOVES TAB */}
@@ -108,7 +109,6 @@ const ClassroomSidebar = ({
 
                         {/* Controls Footer */}
                         <div className="p-3 border-t border-white/5 bg-[#121215] space-y-3">
-                            {/* Navigation Buttons */}
                             <div className="flex justify-center gap-1">
                                 <ControlBtn onClick={() => goToMove(0)} icon={ChevronLeft} double />
                                 <ControlBtn onClick={() => goToMove(viewIndex === -1 ? history.length - 2 : viewIndex - 1)} icon={ChevronLeft} />
@@ -116,7 +116,6 @@ const ClassroomSidebar = ({
                                 <ControlBtn onClick={() => goToMove(-1)} icon={ChevronRight} double />
                             </div>
                             
-                            {/* Action Buttons */}
                             <div className="grid grid-cols-2 gap-2">
                                 <button onClick={() => setShowPGNModal(true)} className="flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 py-2.5 rounded-md text-[10px] font-bold uppercase text-zinc-300 transition-colors border border-white/5">
                                     <Clipboard className="w-3 h-3"/> Import PGN
@@ -136,7 +135,7 @@ const ClassroomSidebar = ({
                     </div>
                 )}
 
-                {/* 3. STUDENTS TAB */}
+                {/* 3. STUDENTS TAB (WITH CONTROL ASSIGNMENT) */}
                 {activeTab === 'students' && (
                     <div className="absolute inset-0 overflow-y-auto p-4 space-y-3">
                         <div className="flex items-center justify-between mb-4">
@@ -152,10 +151,44 @@ const ClassroomSidebar = ({
                                     </div>
                                     <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#1a1a1a] rounded-full shadow-sm"></div>
                                 </div>
+                                
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-semibold text-zinc-200 truncate">{u.name}</p>
+                                    <p className="text-sm font-semibold text-zinc-200 truncate flex items-center gap-2">
+                                        {u.name}
+                                        {/* Status Indicators */}
+                                        {controls?.white === u._id && <span className="text-[9px] bg-white text-black px-1 rounded font-bold" title="Controls White">W</span>}
+                                        {controls?.black === u._id && <span className="text-[9px] bg-zinc-800 text-white px-1 rounded font-bold border border-white/20" title="Controls Black">B</span>}
+                                    </p>
                                     <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-medium">{u.role}</p>
                                 </div>
+
+                                {/* [NEW] CONTROL BUTTONS - VISIBLE TO COACH ONLY */}
+                                {userRole === 'Coach' && (
+                                    <div className="flex gap-1">
+                                        <button 
+                                            onClick={() => onAssignControl('white', controls?.white === u._id ? null : u._id)}
+                                            className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold border transition-all ${
+                                                controls?.white === u._id 
+                                                ? 'bg-white text-black border-white shadow-[0_0_8px_rgba(255,255,255,0.3)]' 
+                                                : 'bg-transparent text-zinc-500 border-zinc-700 hover:border-white hover:text-white'
+                                            }`}
+                                            title={controls?.white === u._id ? "Remove White Control" : "Give White Control"}
+                                        >
+                                            W
+                                        </button>
+                                        <button 
+                                            onClick={() => onAssignControl('black', controls?.black === u._id ? null : u._id)}
+                                            className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold border transition-all ${
+                                                controls?.black === u._id 
+                                                ? 'bg-black text-white border-white shadow-[0_0_8px_rgba(255,255,255,0.1)]' 
+                                                : 'bg-transparent text-zinc-500 border-zinc-700 hover:border-white hover:text-white'
+                                            }`}
+                                            title={controls?.black === u._id ? "Remove Black Control" : "Give Black Control"}
+                                        >
+                                            B
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ))}
                           
