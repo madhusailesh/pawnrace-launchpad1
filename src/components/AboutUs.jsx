@@ -19,7 +19,7 @@ const teamMembers = [
   },
   {
     name: "Madhu Sailesh Sasamal",
-    role: "Chief Technology Officer (CTO)",
+    role: "Software Developer",
     img: "https://i.ibb.co/jPs8Wscs/IMG-20250907-223807893-AE-2.png",
     desc: "Strategic thinker driving product development and backend excellence with precision and vision.",
   },
