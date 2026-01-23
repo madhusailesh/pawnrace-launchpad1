@@ -475,7 +475,7 @@ const CoachAssignment = () => {
         </div>
       </div>
 
-      {/* ================= REVIEW MODAL ================= */}
+      {/* =================REVIEW MODAL================= */}
       <AnimatePresence>
         {reviewModalOpen && currentAssignment && (
           <motion.div 
