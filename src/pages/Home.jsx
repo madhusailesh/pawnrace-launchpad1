@@ -43,8 +43,9 @@ export default function Home() {
 
       <main className="flex-grow">
         <Hero onLoginClick={handleLoginClick} />
-        <Features />
         <Coaches />
+        <Features />
+        
       </main>
       <StudentGlory/>
       <Footer />
