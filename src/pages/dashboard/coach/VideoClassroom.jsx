@@ -15,7 +15,7 @@ import CoordinateOverlay from './Classroom_features/CoordinateOverlay';
 import SetupPosition from './Classroom_features/SetupPosition';
 import Syllabus from './Classroom_features/Syllabus';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://pawnrace-game-socket-backend.vercel.app/';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ;
 
 const VideoClassroom = () => {
     const { roomId } = useParams();

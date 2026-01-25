@@ -11,7 +11,7 @@ import { useBoardDrawing } from '../../../hooks/useBoardDrawing';
 import ClassroomSidebar from '../coach/Classroom_features/ClassroomSidebar';
 import CoordinateOverlay from '../coach/Classroom_features/CoordinateOverlay';
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'https://pawnrace-game-socket-backend.vercel.app/';
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ;
 
 const StudentVideoClassroom = () => {
     const { roomId } = useParams();
