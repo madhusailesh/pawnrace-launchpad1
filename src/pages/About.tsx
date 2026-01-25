@@ -4,7 +4,7 @@ import OurVission from "@/components/OurVission";
 import Footer from "@/components/Footer";
 import { useState } from "react";
 import AuthModal from "@/components/AuthModal";
-
+//comment
 const About: React.FC = () => {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
