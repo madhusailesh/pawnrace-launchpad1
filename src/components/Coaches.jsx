@@ -178,7 +178,7 @@ const coaches = [
   },
   {
     name: "Debiprasad Nayak",
-    image: "https://i.ibb.co/23qJqT4v/IMG-7519-1.jpg", // ⬅ replace with real image URL
+    image: "https://i.ibb.co/23qJqT4v/IMG-7519-1.jpg", 
     title: "State & National Level Chess Coach",
     description:
       "Debiprasad Nayak is a highly accomplished chess player and coach with 3+ years of coaching experience and outstanding achievements at state, national, and international levels.",
