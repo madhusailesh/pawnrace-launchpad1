@@ -11,7 +11,7 @@ const Pricing: React.FC<PricingProps> = ({ onLoginClick }) => {
   const plans = [
     {
       name: 'Beginner',
-      price: '₹9999',
+      price: '₹999',
       period: '/month',
       description: 'Perfect for chess newcomers',
       features: [
