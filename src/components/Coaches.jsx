@@ -12,7 +12,7 @@ const coaches = [
   {
     name: "Dipti Ranjan Nayak",
     image:
-      "https://i.ibb.co/ZzW0MGqC/Whats-App-Image-2025-08-31-at-00-25-17-4cb7a091.jpg",
+      "https://i.ibb.co/7J8hYpj0/857e4e5d-6b53-4911-b91e-da1a0635e5b0.jpg",
     title: "Experienced Chess Coach & Player",
     description:
       "With over 8 years of playing experience and 3+ years of coaching experience, Dipti Ranjan Nayak is a highly accomplished chess coach and player.",
