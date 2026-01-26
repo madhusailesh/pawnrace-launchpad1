@@ -177,6 +177,28 @@ const coaches = [
     languages: ["English", "Hindi", "Odia"],
   },
   {
+    name: "Tapan Badamundi",
+    image:
+      "https://i.ibb.co/RGGxB5kz/455e7661-1fc9-4385-94c2-717bbda15d27.jpg", 
+      // ⬆️ Replace this with uploaded image URL (imgbb / cloudinary)
+    title: "FIDE Rated Chess Coach & Player",
+    description:
+      "Tapan Badamundi is a highly respected FIDE-rated chess player and coach with a peak FIDE rating of 2000. Known for his deep positional understanding and tournament experience, he brings elite-level training to his students.",
+    achievements: [
+      "♟️ FIDE Rating: 2000",
+      "🏆 Multiple National & International Tournament Performances",
+      "🎯 Known for strong positional & endgame mastery",
+      "🌍 Active participant in FIDE-rated events",
+    ],
+    coaching: [
+      "Professional Chess Coaching",
+      "Advanced Tournament Preparation",
+      "Opening Repertoire & Endgame Training",
+    ],
+    students: [],
+    fideId: "XXXXXXX", // 👉 add real FIDE ID if available
+  },
+  {
     name: "Debiprasad Nayak",
     image: "https://i.ibb.co/23qJqT4v/IMG-7519-1.jpg", 
     title: "State & National Level Chess Coach",
