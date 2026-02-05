@@ -198,42 +198,7 @@ const coaches = [
     students: [],
     fideId: "XXXXXXX", // 👉 add real FIDE ID if available
   },
-  {
-    name: "Debiprasad Nayak",
-    image: "https://i.ibb.co/23qJqT4v/IMG-7519-1.jpg", 
-    title: "State & National Level Chess Coach",
-    description:
-      "Debiprasad Nayak is a highly accomplished chess player and coach with 3+ years of coaching experience and outstanding achievements at state, national, and international levels.",
-    achievements: [
-      "🏆 U-17 State Open Chess Championship 2019 – 1st",
-      "🥉 U-17 State Championship 2018 – 3rd",
-      "🏆 Rajdhani Cup (Category-A) – 1st",
-      "🏆 All Odisha Open Chess Championship 2020 – 1st",
-      "🌍 Kashmir International Open Rating Chess 2022 – 14th",
-      "🥇 KVS Regional 2018 – Gold Medal",
-      "🏆 Inter College Chess Championship – 1st",
-      "🥈 All India Open Kantabanji – 2nd",
-      "⭐ Many more achievements",
-    ],
-    coaching: ["3+ years of professional coaching experience"],
-    students: [
-      {
-        name: "Sayansh Das",
-        achievement: "FIDE Rating: 1524",
-        photo: "https://via.placeholder.com/100?text=Sayansh",
-      },
-      {
-        name: "Ananya Mishra",
-        achievement: "FIDE Rating: 1464",
-        photo: "https://via.placeholder.com/100?text=Ananya",
-      },
-      {
-        name: "Kusagra",
-        achievement: "FIDE Rating: 1514",
-        photo: "https://via.placeholder.com/100?text=Kusagra",
-      },
-    ],
-  }
+  
 ];
 
 export default function Coaches() {
